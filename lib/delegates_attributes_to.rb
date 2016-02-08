@@ -135,8 +135,8 @@ module DelegatesAttributesTo
           result.merge! delegated_attribute => association_changed_attributes[attribute]
         end
         changed_attributes = super
-        changed_attributes.merge!(result)
-        changed_attributes
+        result.merge! changed_attributes
+        result
       end
   end
 end
