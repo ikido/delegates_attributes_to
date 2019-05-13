@@ -1,4 +1,34 @@
+module DelegatesAttributesToWithExtras
+  def assign_multiparameter_attributes(pairs)
+    delegated_pairs = {}
+    original_pairs  = []
+
+    pairs.each do |name, value|
+      # it splits multiparameter attribute
+      # 'published_at(2i)'  => ['published_at(2i)', 'published_at', '(2i)']
+      # 'published_at'      => ['published_at',     'published_at',  nil  ]
+      __, delegated_attribute, suffix = name.match(/^(\w+)(\([0-9]*\w\))?$/).to_a
+      association, attribute = self.class.delegated_attributes[delegated_attribute]
+
+      if association
+        (delegated_pairs[association] ||= {})["#{attribute}#{suffix}"] = value
+      else
+        original_pairs << [name, value]
+      end
+    end
+
+    delegated_pairs.each do |association, attributes|
+      association_object = send(association) || send("build_#{association}")
+      # let association_object handle its multiparameter attributes
+      association_object.attributes = attributes
+    end
+
+    super(original_pairs)
+  end
+end
+
 module DelegatesAttributesTo
+  prepend DelegatesAttributesToWithExtras
 
   DEFAULT_REJECTED_COLUMNS = ['created_at','created_on','updated_at','updated_on','lock_version','type','id','position','parent_id','lft','rgt'].freeze
   DIRTY_SUFFIXES = ["_changed?", "_change", "_will_change!", "_was"].freeze
@@ -6,8 +36,6 @@ module DelegatesAttributesTo
   def self.included(base)
     base.extend ClassMethods
     base.send :include, InstanceMethods
-
-    base.alias_method_chain :assign_multiparameter_attributes, :delegation
 
     base.class_attribute :default_rejected_delegate_columns
     base.default_rejected_delegate_columns = DEFAULT_REJECTED_COLUMNS.dup
@@ -89,33 +117,6 @@ module DelegatesAttributesTo
   module InstanceMethods
 
     private
-
-      def assign_multiparameter_attributes_with_delegation(pairs)
-        delegated_pairs = {}
-        original_pairs  = []
-
-        pairs.each do |name, value|
-          # it splits multiparameter attribute
-          # 'published_at(2i)'  => ['published_at(2i)', 'published_at', '(2i)']
-          # 'published_at'      => ['published_at',     'published_at',  nil  ]
-          __, delegated_attribute, suffix = name.match(/^(\w+)(\([0-9]*\w\))?$/).to_a
-          association, attribute = self.class.delegated_attributes[delegated_attribute]
-
-          if association
-            (delegated_pairs[association] ||= {})["#{attribute}#{suffix}"] = value
-          else
-            original_pairs << [name, value]
-          end
-        end
-
-        delegated_pairs.each do |association, attributes|
-          association_object = send(association) || send("build_#{association}")
-          # let association_object handle its multiparameter attributes
-          association_object.attributes = attributes
-        end
-
-        assign_multiparameter_attributes_without_delegation(original_pairs)
-      end
 
       def changed_attributes
         result = {}
